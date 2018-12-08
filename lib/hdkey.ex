@@ -10,6 +10,9 @@ defmodule Hdkey do
 
   alias Hdkey.{Base58, Utils}
 
+  defdelegate decode_hex(hex), to: Utils
+  defdelegate encode_hex(hex), to: Utils
+
   @doc """
   Generate master key from seed.
   """
