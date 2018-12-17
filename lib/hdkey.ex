@@ -81,7 +81,7 @@ defmodule Hdkey do
   @doc """
 
   """
-  def from_json(obj) do
+  def from_xkey(obj) do
     <<_::bytes-size(8), depth::bytes-size(2), _::bytes-size(8), child_index::bytes-size(8),
       chain_code::bytes-size(64), key::bytes-size(66),
       _::binary>> =
@@ -111,7 +111,10 @@ defmodule Hdkey do
   @doc """
 
   """
-  def derive_child(%{private_key: private_key} = hdkey, index \\ 0, only_public \\ false) do
+  def derive_child(hdkey, index \\ 0, only_public \\ false)
+
+  def derive_child(%{private_key: private_key} = hdkey, index, only_public)
+      when not is_nil(private_key) do
     <<child_private_key::bytes-size(64), child_chain_code::bytes-size(64)>> =
       build_one_way_hash(private_key, hdkey.public_key, hdkey.chain_code, index)
 
@@ -137,6 +140,36 @@ defmodule Hdkey do
       index: index,
       parent: hdkey
     }
+  end
+
+  def derive_child(%{public_key: public_key} = hdkey, index, _only_public) do
+    message = Utils.decode_hex(public_key) <> Utils.i_as_bytes(index)
+
+    <<child_private_key::bytes-size(64), child_chain_code::bytes-size(64)>> =
+      Utils.hmac_sha512(message, Utils.decode_hex(hdkey.chain_code))
+
+    child_chain_code_hex =
+      child_chain_code
+      |> String.downcase()
+      |> String.pad_leading(64, "0")
+
+    %__MODULE__{
+      private_key: nil,
+      public_key: pubkey_tweak_add(public_key, child_private_key),
+      chain_code: child_chain_code_hex,
+      depth: hdkey.depth + 1,
+      index: index,
+      parent: hdkey
+    }
+  end
+
+  @doc false
+  defp pubkey_tweak_add(public_key, child_private_key) do
+    public_key
+    |> Utils.decode_hex()
+    |> :libsecp256k1.ec_pubkey_tweak_add(Utils.decode_hex(child_private_key))
+    |> elem(1)
+    |> Utils.encode_hex()
   end
 
   @doc false
